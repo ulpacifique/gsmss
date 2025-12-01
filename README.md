@@ -93,3 +93,94 @@ text
 4. Commit and push to GitHub
 
 This will display with proper headings, bullet points, code formatting, and section organization on GitHub. The markdown formatting will make it look professional and easy to read.
+# Community Savings Group Financial Management System
+
+A .NET web application for transparent financial management solutions for community savings groups, enabling members to track contributions and administrators to manage group finances efficiently.
+
+## Features
+
+### Member Functions
+- **Member login** - Secure access to personal dashboard
+- **View goal(s) and progress** - Track savings goals and achievement status
+- **Submit contributions with payment reference** - Make contributions with transaction tracking
+- **View contribution status** - Check approval status of submissions
+- **View contribution reports** - Access personal contribution history and summaries
+
+### Admin Functions
+- **Admin login** - Secure administrative access
+- **Create/update savings goals** - Manage group savings targets
+- **Approve/reject contributions** - Review and validate member contributions
+- **Manage members** - Handle member accounts and permissions
+- **Generate financial reports** - Create comprehensive financial summaries
+
+## Non-Functional Requirements
+- **Secure authentication and authorization** - Robust security measures
+- **Simple, intuitive web interface** - User-friendly design
+- **Fast load times and responsive design** - Optimized performance
+- **Reliable SQL Server database integration** - Stable data management
+- **Data consistency and validation** - Accurate and reliable information
+- **Mobile-friendly design** - Accessible on all devices
+
+## Use Cases
+
+### Member Use Cases
+1. Login to system
+2. Browse available savings goals
+3. Submit financial contributions
+4. Monitor contribution approval status
+5. View personal contribution history
+
+### Admin Use Cases
+1. System authentication
+2. Create and modify savings goals
+3. Review and process contributions
+4. Member account management
+5. Generate comprehensive reports
+
+## Technology Stack
+- **Backend**: .NET Framework/ASP.NET
+- **Database**: SQL Server
+- **Frontend**: HTML, CSS, JavaScript
+- **Authentication**: ASP.NET Identity
+
+## Installation & Setup
+*(Add your specific installation instructions here)*
+
+1. Clone the repository
+2. Restore NuGet packages
+3. Update database connection string in `Web.config`
+4. Run database migrations
+5. Build and run the solution
+
+## Contributing
+
+We welcome contributions! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## Development Team
+
+| Name | Student ID | Role |
+|------|------------|------|
+| ISHIMWE Gwiza Ruth | 26082 | Team Member |
+| Rubayiza David | 26439 | Team Member |
+| Hirwa Willy | 25308 | Team Member |
+| Fatime Dadi Wardougou | 25858 | Team Member |
+| UWIHIRWE Pacifique Lazaro | 25443 | Team Member |
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+
+## Support
+
+For support and questions, please contact the development team or create an issue in the repository.
+
+---
+
+**Developed as a .NET Final Project**  
+Building transparent financial management solutions for community savings groups
