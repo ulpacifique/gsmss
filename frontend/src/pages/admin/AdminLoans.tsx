@@ -252,3 +252,4 @@ const AdminLoans = () => {
 
 export default AdminLoans;
 
+
