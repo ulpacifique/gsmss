@@ -115,6 +115,7 @@ app.UseCors("AllowAll");
 app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") &&
                        !context.Request.Path.StartsWithSegments("/test-db") &&
                        !context.Request.Path.StartsWithSegments("/api/auth") &&
+                       !context.Request.Path.StartsWithSegments("/api/setup-database") && // ADD THIS
                        !context.Request.Path.StartsWithSegments("/swagger") &&
                        !context.Request.Path.StartsWithSegments("/") &&
                        context.Request.Path != "/",
@@ -226,13 +227,20 @@ app.MapGet("/test-db", async (ApplicationDbContext db) =>
     }
 });
 
-app.MapPost("/api/setup-database", async (ApplicationDbContext db) =>
+app.MapPost("/api/create-correct-users", async (ApplicationDbContext db) =>
 {
     try
     {
-        Console.WriteLine("Setting up database...");
+        Console.WriteLine("Creating users with correct BCrypt hashes...");
         
-        // 1. Ensure Users table exists
+        // Generate proper BCrypt hashes
+        var adminHash = BCrypt.Net.BCrypt.HashPassword("Admin@123");
+        var memberHash = BCrypt.Net.BCrypt.HashPassword("Member@123");
+        
+        Console.WriteLine($"Admin hash: {adminHash.Substring(0, Math.Min(30, adminHash.Length))}...");
+        Console.WriteLine($"Member hash: {memberHash.Substring(0, Math.Min(30, memberHash.Length))}...");
+        
+        // Create Users table if not exists
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""Users"" (
                 ""UserId"" SERIAL PRIMARY KEY,
@@ -250,60 +258,34 @@ app.MapPost("/api/setup-database", async (ApplicationDbContext db) =>
             );
         ");
         
-        Console.WriteLine("Users table created/verified");
+        // Clear existing users
+        await db.Database.ExecuteSqlRawAsync("DELETE FROM \"Users\"");
         
-        // 2. Create admin user if doesn't exist
-        var adminExists = await db.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newadmin@community.com'")
-            .FirstOrDefaultAsync() > 0;
-            
-        if (!adminExists)
-        {
-            await db.Database.ExecuteSqlRawAsync(@"
-                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
-                VALUES (
-                    'newadmin@community.com',
-                    '{bcrypt}$2a$11$XhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4',
-                    'Admin',
-                    'User',
-                    'Admin',
-                    true
-                )");
-            Console.WriteLine("Admin user created");
-        }
+        // Insert new users with correct hashes
+        await db.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
+            VALUES ('newadmin@community.com', {0}, 'Admin', 'User', 'Admin', true)
+        ", adminHash);
         
-        // 3. Create member user if doesn't exist
-        var memberExists = await db.Database.SqlQueryRaw<int>(
-            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newmember@community.com'")
-            .FirstOrDefaultAsync() > 0;
-            
-        if (!memberExists)
-        {
-            await db.Database.ExecuteSqlRawAsync(@"
-                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
-                VALUES (
-                    'newmember@community.com',
-                    '{bcrypt}$2a$11$YhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4',
-                    'John',
-                    'Doe',
-                    'Member',
-                    true
-                )");
-            Console.WriteLine("Member user created");
-        }
+        await db.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
+            VALUES ('newmember@community.com', {0}, 'John', 'Doe', 'Member', true)
+        ", memberHash);
         
-        var userCount = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefaultAsync();
+        // Verify
+        var users = await db.Database.SqlQueryRaw<dynamic>(
+            "SELECT \"Email\", \"Role\", \"PasswordHash\" FROM \"Users\"")
+            .ToListAsync();
         
         return Results.Ok(new { 
             success = true,
-            message = "Database setup complete", 
-            userCount = userCount,
-            users = new[] { "newadmin@community.com", "newmember@community.com" }
+            message = "Users created with correct BCrypt hashes",
+            users = users
         });
     }
     catch (Exception ex)
     {
-        return Results.Problem($"Setup failed: {ex.Message}");
+        return Results.Problem($"Error: {ex.Message}\n{ex.StackTrace}");
     }
 });
 

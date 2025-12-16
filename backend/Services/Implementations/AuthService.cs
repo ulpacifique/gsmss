@@ -20,42 +20,40 @@ namespace CommunityFinanceAPI.Services.Implementations
 
         // === NEW METHODS FOR SIMPLE AUTHENTICATION ===
         public async Task<bool> ValidateUserCredentialsAsync(string email, string password)
+{
+    Console.WriteLine($"=== VALIDATE USER CREDENTIALS ===");
+    Console.WriteLine($"Email: {email}");
+    Console.WriteLine($"Password: [REDACTED], length: {password?.Length ?? 0}");
+
+    try
+    {
+        var user = await _context.Users
+            .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
+
+        if (user == null)
         {
-            Console.WriteLine($"=== VALIDATING CREDENTIALS ===");
-            Console.WriteLine($"Email: {email}");
-            Console.WriteLine($"Password length: {password?.Length ?? 0}");
-
-            var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == email && u.IsActive);
-
-            if (user == null)
-            {
-                Console.WriteLine("❌ User not found or inactive");
-                return false;
-            }
-
-            Console.WriteLine($"✅ User found: {user.Email}");
-            Console.WriteLine($"PasswordHash length: {user.PasswordHash?.Length ?? 0}");
-            Console.WriteLine($"PasswordHash starts with: {user.PasswordHash?.Substring(0, Math.Min(10, user.PasswordHash?.Length ?? 0))}");
-
-            if (string.IsNullOrWhiteSpace(password))
-            {
-                Console.WriteLine("❌ Password is null or empty");
-                return false;
-            }
-
-            if (string.IsNullOrWhiteSpace(user.PasswordHash))
-            {
-                Console.WriteLine("❌ PasswordHash is null or empty");
-                return false;
-            }
-
-            var result = VerifyPassword(password, user.PasswordHash);
-            Console.WriteLine($"Password match result: {result}");
-            Console.WriteLine($"=== END VALIDATION ===");
-
-            return result;
+            Console.WriteLine("❌ User not found or inactive");
+            return false;
         }
+
+        Console.WriteLine($"✅ User found: {user.Email}");
+        Console.WriteLine($"User ID: {user.UserId}");
+        Console.WriteLine($"Role: {user.Role}");
+        Console.WriteLine($"PasswordHash: {user.PasswordHash?.Substring(0, Math.Min(30, user.PasswordHash?.Length ?? 0))}...");
+        
+        var result = VerifyPassword(password, user.PasswordHash);
+        Console.WriteLine($"Final validation result: {result}");
+        Console.WriteLine($"=== END VALIDATE ===");
+        
+        return result;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ ValidateUserCredentialsAsync error: {ex.Message}");
+        Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        return false;
+    }
+}
 
         public async Task<User> GetUserByEmailAsync(string email)
         {
