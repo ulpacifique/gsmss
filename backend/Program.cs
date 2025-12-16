@@ -128,91 +128,76 @@ app.UseAuthorization();
 app.MapControllers();
 
 // Apply migrations and seed data
+// Apply migrations and seed data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     
     try
     {
-        Console.WriteLine("Checking database and applying migrations...");
+        Console.WriteLine("Creating database if it doesn't exist...");
         
-        // REMOVE ALL SQL SERVER SPECIFIC CODE - PostgreSQL doesn't need it
-        // Apply pending migrations
-        var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
-        if (pendingMigrations.Any())
-        {
-            Console.WriteLine($"Applying {pendingMigrations.Count()} pending migrations...");
-            dbContext.Database.Migrate();
-            Console.WriteLine("Migrations applied successfully.");
-        }
-        else
-        {
-            Console.WriteLine("Database is up to date. No migrations needed.");
-        }
+        // This creates the database and tables if they don't exist
+        dbContext.Database.EnsureCreated();
+        
+        Console.WriteLine("Database created/verified successfully.");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Warning: Migration error: {ex.Message}");
+        Console.WriteLine($"Warning: Database creation error: {ex.Message}");
         Console.WriteLine("The application will continue, but some features may not work.");
     }
 
     // Seed a NEW admin user with BCrypt
-    try
+    if (!dbContext.Users.Any(u => u.Email == "newadmin@community.com"))
     {
-        if (!dbContext.Users.Any(u => u.Email == "newadmin@community.com"))
+        Console.WriteLine("Creating new admin user with BCrypt...");
+
+        var newAdmin = new User
         {
-            Console.WriteLine("Creating new admin user with BCrypt...");
+            Email = "newadmin@community.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
+            FirstName = "Admin",
+            LastName = "User",
+            PhoneNumber = "123-456-7890",
+            Role = "Admin",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
 
-            var newAdmin = new User
-            {
-                Email = "newadmin@community.com",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"), // Using BCrypt
-                FirstName = "Admin",
-                LastName = "User",
-                PhoneNumber = "123-456-7890",
-                Role = "Admin",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
+        dbContext.Users.Add(newAdmin);
+        dbContext.SaveChanges();
 
-            dbContext.Users.Add(newAdmin);
-            dbContext.SaveChanges();
-
-            Console.WriteLine("✅ New admin created!");
-            Console.WriteLine("   Email: newadmin@community.com");
-            Console.WriteLine("   Password: Admin@123");
-        }
-
-        // Seed a member user with BCrypt
-        if (!dbContext.Users.Any(u => u.Email == "newmember@community.com"))
-        {
-            Console.WriteLine("Creating new member user with BCrypt...");
-
-            var newMember = new User
-            {
-                Email = "newmember@community.com",
-                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member@123"), // Using BCrypt
-                FirstName = "John",
-                LastName = "Doe",
-                PhoneNumber = "123-456-7890",
-                Role = "Member",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            dbContext.Users.Add(newMember);
-            dbContext.SaveChanges();
-
-            Console.WriteLine("✅ New member created!");
-            Console.WriteLine("   Email: newmember@community.com");
-            Console.WriteLine("   Password: Member@123");
-        }
+        Console.WriteLine("✅ New admin created!");
+        Console.WriteLine("   Email: newadmin@community.com");
+        Console.WriteLine("   Password: Admin@123");
     }
-    catch (Exception ex)
+
+    // Seed a member user with BCrypt
+    if (!dbContext.Users.Any(u => u.Email == "newmember@community.com"))
     {
-        Console.WriteLine($"Warning: Could not seed users: {ex.Message}");
+        Console.WriteLine("Creating new member user with BCrypt...");
+
+        var newMember = new User
+        {
+            Email = "newmember@community.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member@123"),
+            FirstName = "John",
+            LastName = "Doe",
+            PhoneNumber = "123-456-7890",
+            Role = "Member",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+
+        dbContext.Users.Add(newMember);
+        dbContext.SaveChanges();
+
+        Console.WriteLine("✅ New member created!");
+        Console.WriteLine("   Email: newmember@community.com");
+        Console.WriteLine("   Password: Member@123");
     }
 }
 
