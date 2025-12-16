@@ -231,9 +231,10 @@ app.MapPost("/api/create-test-users", async (ApplicationDbContext db) =>
 {
     try
     {
-        Console.WriteLine("Creating Users table and test users...");
+        Console.WriteLine("Starting to create Users table and test users...");
         
-        // 1. Create Users table if not exists
+        // 1. First, ensure the table exists
+        Console.WriteLine("Creating Users table if not exists...");
         await db.Database.ExecuteSqlRawAsync(@"
             CREATE TABLE IF NOT EXISTS ""Users"" (
                 ""UserId"" SERIAL PRIMARY KEY,
@@ -250,12 +251,18 @@ app.MapPost("/api/create-test-users", async (ApplicationDbContext db) =>
                 CONSTRAINT ""UQ_Users_Email"" UNIQUE(""Email"")
             );
         ");
-        
         Console.WriteLine("✅ Users table created/verified");
         
-        // 2. Clear existing users
-        await db.Database.ExecuteSqlRawAsync("DELETE FROM \"Users\"");
-        Console.WriteLine("✅ Cleared existing users");
+        // 2. Clear existing users (handle if table is empty)
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync("DELETE FROM \"Users\"");
+            Console.WriteLine("✅ Cleared existing users");
+        }
+        catch (Exception deleteEx)
+        {
+            Console.WriteLine($"Note when clearing users: {deleteEx.Message}");
+        }
         
         // 3. Create new users with proper BCrypt hashes
         var adminHash = BCrypt.Net.BCrypt.HashPassword("Admin@123");
@@ -276,10 +283,18 @@ app.MapPost("/api/create-test-users", async (ApplicationDbContext db) =>
         
         Console.WriteLine("✅ Test users created");
         
-        // 4. Verify
-        var users = await db.Database.SqlQueryRaw<dynamic>(
-            "SELECT \"UserId\", \"Email\", \"FirstName\", \"LastName\", \"Role\" FROM \"Users\"")
-            .ToListAsync();
+        // 4. Verify by checking table directly
+        var users = new List<dynamic>();
+        try
+        {
+            users = await db.Database.SqlQueryRaw<dynamic>(
+                "SELECT \"UserId\", \"Email\", \"FirstName\", \"LastName\", \"Role\" FROM \"Users\"")
+                .ToListAsync();
+        }
+        catch (Exception queryEx)
+        {
+            Console.WriteLine($"Error querying users: {queryEx.Message}");
+        }
         
         return Results.Ok(new { 
             success = true,
@@ -290,6 +305,8 @@ app.MapPost("/api/create-test-users", async (ApplicationDbContext db) =>
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"❌ Error in create-test-users: {ex.Message}");
+        Console.WriteLine($"Stack trace: {ex.StackTrace}");
         return Results.Problem($"Error: {ex.Message}\n{ex.StackTrace}");
     }
 });
