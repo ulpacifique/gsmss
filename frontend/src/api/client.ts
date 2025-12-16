@@ -2,7 +2,7 @@ import axios, { AxiosHeaders } from "axios";
 
 // Default to backend port 5154; override via VITE_API_BASE_URL if needed
 const baseURL =
-   import.meta.env.VITE_API_BASE_URL?.toString() ?? "https://gsms-bmmx.onrender.com";
+   import.meta.env.VITE_API_BASE_URL?.toString() ?? "https://gsmss.onrender.com";
 
 let credentialHeaders: { email?: string; password?: string } = {};
 
