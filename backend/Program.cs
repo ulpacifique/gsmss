@@ -112,10 +112,11 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 // Use custom authentication middleware ONLY for non-public endpoints
+// Use custom authentication middleware ONLY for non-public endpoints
 app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") &&
                        !context.Request.Path.StartsWithSegments("/test-db") &&
                        !context.Request.Path.StartsWithSegments("/api/auth") &&
-                       !context.Request.Path.StartsWithSegments("/api/setup-database") && // ADD THIS
+                       !context.Request.Path.StartsWithSegments("/api/create-correct-users") &&
                        !context.Request.Path.StartsWithSegments("/swagger") &&
                        !context.Request.Path.StartsWithSegments("/") &&
                        context.Request.Path != "/",
