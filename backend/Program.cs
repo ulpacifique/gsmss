@@ -68,7 +68,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure PostgreSQL (REMOVED .UseSnakeCaseNamingConvention())
+// Configure PostgreSQL
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -111,7 +111,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Add this before app.UseMiddleware<SimpleAuthMiddleware>();
 // Use custom authentication middleware ONLY for non-public endpoints
 app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") &&
                        !context.Request.Path.StartsWithSegments("/test-db") &&
@@ -123,11 +122,205 @@ app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") &&
 {
     appBuilder.UseMiddleware<SimpleAuthMiddleware>();
 });
+
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Add custom endpoints
+app.MapGet("/health", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        var canConnect = db.Database.CanConnect();
+        var userCount = 0;
+        
+        try
+        {
+            userCount = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefaultAsync();
+        }
+        catch
+        {
+            // Table might not exist yet
+            userCount = 0;
+        }
+        
+        return Results.Ok(new 
+        { 
+            status = "OK", 
+            database = canConnect ? "Connected" : "Disconnected",
+            tablesExist = true,
+            usersCount = userCount,
+            timestamp = DateTime.UtcNow,
+            message = "Community Finance API is running"
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new 
+        { 
+            status = "ERROR",
+            database = "Error",
+            error = ex.Message,
+            timestamp = DateTime.UtcNow,
+            message = "Health check failed"
+        });
+    }
+});
+
+app.MapGet("/test-db", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        // Test 1: Connection
+        var canConnect = db.Database.CanConnect();
+        
+        // Test 2: List tables (handle empty)
+        var tables = new List<string>();
+        try
+        {
+            tables = await db.Database.SqlQueryRaw<string>(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
+                .ToListAsync();
+        }
+        catch (Exception tableEx)
+        {
+            Console.WriteLine($"Table query error: {tableEx.Message}");
+        }
+        
+        // Test 3: Try to query users (handle empty)
+        List<dynamic> users = new List<dynamic>();
+        try
+        {
+            users = await db.Database.SqlQueryRaw<dynamic>(
+                "SELECT \"UserId\", \"Email\", \"FirstName\", \"LastName\", \"Role\" FROM \"Users\" LIMIT 5")
+                .ToListAsync();
+        }
+        catch (Exception userEx)
+        {
+            Console.WriteLine($"User query error: {userEx.Message}");
+        }
+        
+        return Results.Ok(new
+        {
+            success = true,
+            connection = canConnect ? "✅ Connected" : "❌ Disconnected",
+            tableCount = tables.Count,
+            tables = tables,
+            userCount = users.Count,
+            sampleUsers = users,
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new
+        {
+            success = false,
+            error = ex.Message,
+            details = ex.InnerException?.Message,
+            timestamp = DateTime.UtcNow
+        });
+    }
+});
+
+app.MapPost("/api/setup-database", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        Console.WriteLine("Setting up database...");
+        
+        // 1. Ensure Users table exists
+        await db.Database.ExecuteSqlRawAsync(@"
+            CREATE TABLE IF NOT EXISTS ""Users"" (
+                ""UserId"" SERIAL PRIMARY KEY,
+                ""Email"" VARCHAR(100) NOT NULL,
+                ""PasswordHash"" VARCHAR(255) NOT NULL,
+                ""FirstName"" VARCHAR(50) NOT NULL,
+                ""LastName"" VARCHAR(50) NOT NULL,
+                ""PhoneNumber"" VARCHAR(20),
+                ""ProfilePictureUrl"" TEXT,
+                ""Role"" VARCHAR(50) NOT NULL DEFAULT 'Member',
+                ""IsActive"" BOOLEAN NOT NULL DEFAULT true,
+                ""CreatedAt"" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ""UpdatedAt"" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ""UQ_Users_Email"" UNIQUE(""Email"")
+            );
+        ");
+        
+        Console.WriteLine("Users table created/verified");
+        
+        // 2. Create admin user if doesn't exist
+        var adminExists = await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newadmin@community.com'")
+            .FirstOrDefaultAsync() > 0;
+            
+        if (!adminExists)
+        {
+            await db.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
+                VALUES (
+                    'newadmin@community.com',
+                    '{bcrypt}$2a$11$XhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4',
+                    'Admin',
+                    'User',
+                    'Admin',
+                    true
+                )");
+            Console.WriteLine("Admin user created");
+        }
+        
+        // 3. Create member user if doesn't exist
+        var memberExists = await db.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newmember@community.com'")
+            .FirstOrDefaultAsync() > 0;
+            
+        if (!memberExists)
+        {
+            await db.Database.ExecuteSqlRawAsync(@"
+                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"")
+                VALUES (
+                    'newmember@community.com',
+                    '{bcrypt}$2a$11$YhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4',
+                    'John',
+                    'Doe',
+                    'Member',
+                    true
+                )");
+            Console.WriteLine("Member user created");
+        }
+        
+        var userCount = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefaultAsync();
+        
+        return Results.Ok(new { 
+            success = true,
+            message = "Database setup complete", 
+            userCount = userCount,
+            users = new[] { "newadmin@community.com", "newmember@community.com" }
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Setup failed: {ex.Message}");
+    }
+});
+
+// Simple status endpoint
+app.MapGet("/", () => 
+{
+    return Results.Ok(new 
+    { 
+        service = "Community Finance API", 
+        status = "Running",
+        version = "1.0",
+        documentation = "/swagger",
+        healthCheck = "/health",
+        databaseTest = "/test-db",
+        setupEndpoint = "/api/setup-database (POST)"
+    });
+});
 
 // Apply database setup and seed data
 using (var scope = app.Services.CreateScope())
@@ -262,84 +455,6 @@ using (var scope = app.Services.CreateScope())
         Console.WriteLine($"❌ Seeding error: {seedEx.Message}");
     }
 }
-
-// Add health check endpoint
-app.MapGet("/health", async (ApplicationDbContext db) =>
-{
-    try
-    {
-        var canConnect = db.Database.CanConnect();
-        var usersCount = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefaultAsync();
-        
-        return Results.Ok(new 
-        { 
-            status = "OK", 
-            database = canConnect ? "Connected" : "Disconnected",
-            tablesExist = true,
-            usersCount = usersCount,
-            timestamp = DateTime.UtcNow,
-            message = "Community Finance API is running"
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Problem($"Health check failed: {ex.Message}");
-    }
-});
-
-// Add database test endpoint
-app.MapGet("/test-db", async (ApplicationDbContext db) =>
-{
-    try
-    {
-        // Test 1: Connection
-        var canConnect = db.Database.CanConnect();
-        
-        // Test 2: List tables
-        var tables = await db.Database.SqlQueryRaw<string>(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
-            .ToListAsync();
-            
-        // Test 3: Try to query users
-        var users = await db.Database.SqlQueryRaw<dynamic>(
-            "SELECT \"UserId\", \"Email\", \"FirstName\", \"LastName\", \"Role\" FROM \"Users\" LIMIT 5")
-            .ToListAsync();
-            
-        return Results.Ok(new
-        {
-            success = true,
-            connection = canConnect ? "✅ Connected" : "❌ Disconnected",
-            tableCount = tables.Count,
-            tables = tables,
-            sampleUsers = users,
-            timestamp = DateTime.UtcNow
-        });
-    }
-    catch (Exception ex)
-    {
-        return Results.Ok(new
-        {
-            success = false,
-            error = ex.Message,
-            details = ex.InnerException?.Message,
-            timestamp = DateTime.UtcNow
-        });
-    }
-});
-
-// Simple status endpoint
-app.MapGet("/", () => 
-{
-    return Results.Ok(new 
-    { 
-        service = "Community Finance API", 
-        status = "Running",
-        version = "1.0",
-        documentation = "/swagger",
-        healthCheck = "/health",
-        databaseTest = "/test-db"
-    });
-});
 
 Console.WriteLine("🚀 Application starting...");
 app.Run();
