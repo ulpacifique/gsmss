@@ -111,10 +111,18 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowAll");
 
-// Use custom authentication middleware BEFORE exception handling
-app.UseMiddleware<SimpleAuthMiddleware>();
-
-// Use custom exception handling middleware
+// Add this before app.UseMiddleware<SimpleAuthMiddleware>();
+// Use custom authentication middleware ONLY for non-public endpoints
+app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health") &&
+                       !context.Request.Path.StartsWithSegments("/test-db") &&
+                       !context.Request.Path.StartsWithSegments("/api/auth") &&
+                       !context.Request.Path.StartsWithSegments("/swagger") &&
+                       !context.Request.Path.StartsWithSegments("/") &&
+                       context.Request.Path != "/",
+    appBuilder =>
+{
+    appBuilder.UseMiddleware<SimpleAuthMiddleware>();
+});
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseAuthorization();
