@@ -7,32 +7,21 @@
   </PropertyGroup>
   
   <ItemGroup>
-    <!-- Core Authentication & Hashing -->
+    <!-- Core Packages -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
-    
-    <!-- Excel Export (if you need it) -->
     <PackageReference Include="EPPlus" Version="8.3.1" />
-    
-    <!-- Entity Framework Core with PostgreSQL -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.0" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" /> <!-- CHANGED FROM 8.0.0 -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    
-    <!-- API Documentation -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    
+    <!-- 🔴 CRITICAL: ADD THESE JWT PACKAGES 🔴 -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.15.0" />
+    <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.15.0" />
   </ItemGroup>
-  
-  <!-- REMOVE THESE PACKAGES (They're causing compatibility issues) -->
-  <!-- 
-  <PackageReference Include="Intercom.Dotnet.Client" Version="2.1.1" />
-  <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
-  <PackageReference Include="Microsoft.IdentityModel.Tokens" Version="8.15.0" />
-  <PackageReference Include="UmbracoCms.Core" Version="8.18.15" />
-  <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.0" /> (Already included in Design package)
-  -->
   
   <ItemGroup>
     <Folder Include="Models\ViewModels\" />

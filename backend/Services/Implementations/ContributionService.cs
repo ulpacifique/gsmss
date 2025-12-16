@@ -109,21 +109,8 @@ namespace CommunityFinanceAPI.Services.Implementations
             }
             catch (Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
             {
-                // Log the full exception details
-                var innerException = dbEx.InnerException;
-                var errorMessage = innerException?.Message ?? dbEx.Message;
-                
-                // Try to extract SQL error details if available
-                if (innerException is Microsoft.Data.SqlClient.SqlException sqlEx)
-                {
-                    errorMessage = $"SQL Error {sqlEx.Number}: {sqlEx.Message}";
-                    if (sqlEx.Errors.Count > 0)
-                    {
-                        var sqlError = sqlEx.Errors[0];
-                        errorMessage = $"SQL Error {sqlError.Number} (State {sqlError.State}): {sqlError.Message}";
-                    }
-                }
-                
+                // Simplified error handling for PostgreSQL
+                var errorMessage = dbEx.InnerException?.Message ?? dbEx.Message;
                 throw new InvalidOperationException($"Database error while saving contribution: {errorMessage}", dbEx);
             }
 
@@ -383,7 +370,7 @@ namespace CommunityFinanceAPI.Services.Implementations
                     RelatedEntityId = contributionId
                 });
             }
-            catch (Exception ex)
+            catch (Exception)
             {
                 // Log but don't fail the contribution update if notification fails
                 // Notification service might not be available yet
