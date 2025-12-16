@@ -8,6 +8,7 @@ using CommunityFinanceAPI.Services.Interfaces;
 using CommunityFinanceAPI.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using Npgsql; // ADD THIS
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,9 +68,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure Database
+// 🔴🔴🔴 CRITICAL CHANGE: Switch to PostgreSQL 🔴🔴🔴
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // REMOVE JWT HELPER registration since we're not using JWT
 // builder.Services.AddSingleton<JwtHelper>(); // COMMENT THIS OUT
@@ -135,44 +136,7 @@ using (var scope = app.Services.CreateScope())
     {
         Console.WriteLine("Checking database and applying migrations...");
         
-        // Check if InitialCreate migration needs to be marked as applied
-        try
-        {
-            var connection = dbContext.Database.GetDbConnection();
-            if (connection.State != ConnectionState.Open)
-                connection.Open();
-            
-            // Check if Users table exists but InitialCreate not in history
-            using (var cmd = connection.CreateCommand())
-            {
-                cmd.CommandText = @"
-                    IF EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Users')
-                    AND NOT EXISTS (SELECT * FROM [__EFMigrationsHistory] WHERE [MigrationId] = '20251213140242_InitialCreate')
-                    BEGIN
-                        IF OBJECT_ID(N'[__EFMigrationsHistory]') IS NULL
-                        BEGIN
-                            CREATE TABLE [__EFMigrationsHistory] (
-                                [MigrationId] nvarchar(150) NOT NULL,
-                                [ProductVersion] nvarchar(32) NOT NULL,
-                                CONSTRAINT [PK___EFMigrationsHistory] PRIMARY KEY ([MigrationId])
-                            );
-                        END
-                        INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
-                        VALUES ('20251213140242_InitialCreate', '10.0.0');
-                        PRINT 'InitialCreate migration marked as applied';
-                    END
-                ";
-                cmd.ExecuteNonQuery();
-            }
-            
-            if (connection.State == ConnectionState.Open)
-                connection.Close();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Note: {ex.Message}");
-        }
-        
+        // REMOVE ALL SQL SERVER SPECIFIC CODE - PostgreSQL doesn't need it
         // Apply pending migrations
         var pendingMigrations = dbContext.Database.GetPendingMigrations().ToList();
         if (pendingMigrations.Any())
@@ -193,55 +157,62 @@ using (var scope = app.Services.CreateScope())
     }
 
     // Seed a NEW admin user with BCrypt
-    if (!dbContext.Users.Any(u => u.Email == "newadmin@community.com"))
+    try
     {
-        Console.WriteLine("Creating new admin user with BCrypt...");
-
-        var newAdmin = new User
+        if (!dbContext.Users.Any(u => u.Email == "newadmin@community.com"))
         {
-            Email = "newadmin@community.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"), // Using BCrypt
-            FirstName = "Admin",
-            LastName = "User",
-            PhoneNumber = "123-456-7890",
-            Role = "Admin",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+            Console.WriteLine("Creating new admin user with BCrypt...");
 
-        dbContext.Users.Add(newAdmin);
-        dbContext.SaveChanges();
+            var newAdmin = new User
+            {
+                Email = "newadmin@community.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"), // Using BCrypt
+                FirstName = "Admin",
+                LastName = "User",
+                PhoneNumber = "123-456-7890",
+                Role = "Admin",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
 
-        Console.WriteLine("✅ New admin created!");
-        Console.WriteLine("   Email: newadmin@community.com");
-        Console.WriteLine("   Password: Admin@123");
+            dbContext.Users.Add(newAdmin);
+            dbContext.SaveChanges();
+
+            Console.WriteLine("✅ New admin created!");
+            Console.WriteLine("   Email: newadmin@community.com");
+            Console.WriteLine("   Password: Admin@123");
+        }
+
+        // Seed a member user with BCrypt
+        if (!dbContext.Users.Any(u => u.Email == "newmember@community.com"))
+        {
+            Console.WriteLine("Creating new member user with BCrypt...");
+
+            var newMember = new User
+            {
+                Email = "newmember@community.com",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member@123"), // Using BCrypt
+                FirstName = "John",
+                LastName = "Doe",
+                PhoneNumber = "123-456-7890",
+                Role = "Member",
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            dbContext.Users.Add(newMember);
+            dbContext.SaveChanges();
+
+            Console.WriteLine("✅ New member created!");
+            Console.WriteLine("   Email: newmember@community.com");
+            Console.WriteLine("   Password: Member@123");
+        }
     }
-
-    // Seed a member user with BCrypt
-    if (!dbContext.Users.Any(u => u.Email == "newmember@community.com"))
+    catch (Exception ex)
     {
-        Console.WriteLine("Creating new member user with BCrypt...");
-
-        var newMember = new User
-        {
-            Email = "newmember@community.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member@123"), // Using BCrypt
-            FirstName = "John",
-            LastName = "Doe",
-            PhoneNumber = "123-456-7890",
-            Role = "Member",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        dbContext.Users.Add(newMember);
-        dbContext.SaveChanges();
-
-        Console.WriteLine("✅ New member created!");
-        Console.WriteLine("   Email: newmember@community.com");
-        Console.WriteLine("   Password: Member@123");
+        Console.WriteLine($"Warning: Could not seed users: {ex.Message}");
     }
 }
 
