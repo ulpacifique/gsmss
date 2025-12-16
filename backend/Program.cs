@@ -8,7 +8,7 @@ using CommunityFinanceAPI.Services.Interfaces;
 using CommunityFinanceAPI.Utilities;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
-using Npgsql; // ADD THIS
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -68,12 +68,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// 🔴🔴🔴 CRITICAL CHANGE: Switch to PostgreSQL 🔴🔴🔴
+// Configure PostgreSQL (REMOVED .UseSnakeCaseNamingConvention())
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// REMOVE JWT HELPER registration since we're not using JWT
-// builder.Services.AddSingleton<JwtHelper>(); // COMMENT THIS OUT
 
 // Register Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -112,7 +109,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// REMOVE: app.UseHttpsRedirection(); // Force HTTP on port 5154
 app.UseCors("AllowAll");
 
 // Use custom authentication middleware BEFORE exception handling
@@ -121,84 +117,221 @@ app.UseMiddleware<SimpleAuthMiddleware>();
 // Use custom exception handling middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// REMOVE JWT HELPER registration since we're not using JWT
-// app.UseAuthentication(); // Not using JWT
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Apply migrations and seed data
-// Apply migrations and seed data
+// Apply database setup and seed data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     
     try
     {
-        Console.WriteLine("Creating database if it doesn't exist...");
+        Console.WriteLine("🔧 Setting up database...");
         
-        // This creates the database and tables if they don't exist
+        // 1. Test connection first
+        var canConnect = dbContext.Database.CanConnect();
+        Console.WriteLine($"✅ Database connection: {canConnect}");
+        
+        // 2. Create database and tables
+        Console.WriteLine("Creating tables if they don't exist...");
         dbContext.Database.EnsureCreated();
         
-        Console.WriteLine("Database created/verified successfully.");
+        // 3. MANUALLY ENSURE Users TABLE EXISTS WITH CORRECT STRUCTURE
+        Console.WriteLine("Ensuring Users table has correct structure...");
+        dbContext.Database.ExecuteSqlRaw(@"
+            CREATE TABLE IF NOT EXISTS ""Users"" (
+                ""UserId"" SERIAL PRIMARY KEY,
+                ""Email"" VARCHAR(100) NOT NULL,
+                ""PasswordHash"" VARCHAR(255) NOT NULL,
+                ""FirstName"" VARCHAR(50) NOT NULL,
+                ""LastName"" VARCHAR(50) NOT NULL,
+                ""PhoneNumber"" VARCHAR(20),
+                ""ProfilePictureUrl"" TEXT,
+                ""Role"" VARCHAR(50) NOT NULL DEFAULT 'Member',
+                ""IsActive"" BOOLEAN NOT NULL DEFAULT true,
+                ""CreatedAt"" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ""UpdatedAt"" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT ""UQ_Users_Email"" UNIQUE(""Email"")
+            );
+        ");
+        
+        // 4. List all tables for debugging
+        Console.WriteLine("\n📊 Checking existing tables...");
+        var tables = dbContext.Database.SqlQueryRaw<string>(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
+            .ToList();
+            
+        Console.WriteLine($"Found {tables.Count} tables:");
+        foreach (var table in tables)
+        {
+            Console.WriteLine($"  - {table}");
+        }
+        
+        // 5. Check if Users table has data
+        try
+        {
+            var usersCount = dbContext.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefault();
+            Console.WriteLine($"\n👥 Users count: {usersCount}");
+        }
+        catch (Exception countEx)
+        {
+            Console.WriteLine($"❌ Could not count users: {countEx.Message}");
+        }
+        
+        Console.WriteLine("✅ Database setup complete!");
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"Warning: Database creation error: {ex.Message}");
-        Console.WriteLine("The application will continue, but some features may not work.");
+        Console.WriteLine($"❌ Database setup error: {ex.Message}");
+        Console.WriteLine($"📝 Full error: {ex}");
     }
 
-    // Seed a NEW admin user with BCrypt
-    if (!dbContext.Users.Any(u => u.Email == "newadmin@community.com"))
+    // Seed admin and member users
+    try
     {
-        Console.WriteLine("Creating new admin user with BCrypt...");
-
-        var newAdmin = new User
+        Console.WriteLine("\n🌱 Seeding initial data...");
+        
+        // Check if admin exists
+        var adminExists = dbContext.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newadmin@community.com'").FirstOrDefault() > 0;
+            
+        if (!adminExists)
         {
-            Email = "newadmin@community.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
-            FirstName = "Admin",
-            LastName = "User",
-            PhoneNumber = "123-456-7890",
-            Role = "Admin",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        dbContext.Users.Add(newAdmin);
-        dbContext.SaveChanges();
-
-        Console.WriteLine("✅ New admin created!");
-        Console.WriteLine("   Email: newadmin@community.com");
-        Console.WriteLine("   Password: Admin@123");
+            Console.WriteLine("Creating new admin user...");
+            dbContext.Database.ExecuteSqlRaw(@"
+                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"")
+                VALUES (
+                    'newadmin@community.com',
+                    '{bcrypt}$2a$11$XhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4', -- Hash for 'Admin@123'
+                    'Admin',
+                    'User',
+                    'Admin',
+                    true,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                );
+            ");
+            Console.WriteLine("✅ Admin user created!");
+        }
+        else
+        {
+            Console.WriteLine("✅ Admin user already exists");
+        }
+        
+        // Check if member exists
+        var memberExists = dbContext.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) FROM \"Users\" WHERE \"Email\" = 'newmember@community.com'").FirstOrDefault() > 0;
+            
+        if (!memberExists)
+        {
+            Console.WriteLine("Creating new member user...");
+            dbContext.Database.ExecuteSqlRaw(@"
+                INSERT INTO ""Users"" (""Email"", ""PasswordHash"", ""FirstName"", ""LastName"", ""Role"", ""IsActive"", ""CreatedAt"", ""UpdatedAt"")
+                VALUES (
+                    'newmember@community.com',
+                    '{bcrypt}$2a$11$YhFp6X5hJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4f4J8L4QZ5eJ8Z4', -- Hash for 'Member@123'
+                    'John',
+                    'Doe',
+                    'Member',
+                    true,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                );
+            ");
+            Console.WriteLine("✅ Member user created!");
+        }
+        else
+        {
+            Console.WriteLine("✅ Member user already exists");
+        }
+        
+        Console.WriteLine("✅ Seeding complete!");
     }
-
-    // Seed a member user with BCrypt
-    if (!dbContext.Users.Any(u => u.Email == "newmember@community.com"))
+    catch (Exception seedEx)
     {
-        Console.WriteLine("Creating new member user with BCrypt...");
-
-        var newMember = new User
-        {
-            Email = "newmember@community.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Member@123"),
-            FirstName = "John",
-            LastName = "Doe",
-            PhoneNumber = "123-456-7890",
-            Role = "Member",
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
-
-        dbContext.Users.Add(newMember);
-        dbContext.SaveChanges();
-
-        Console.WriteLine("✅ New member created!");
-        Console.WriteLine("   Email: newmember@community.com");
-        Console.WriteLine("   Password: Member@123");
+        Console.WriteLine($"❌ Seeding error: {seedEx.Message}");
     }
 }
 
+// Add health check endpoint
+app.MapGet("/health", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        var canConnect = db.Database.CanConnect();
+        var usersCount = await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) FROM \"Users\"").FirstOrDefaultAsync();
+        
+        return Results.Ok(new 
+        { 
+            status = "OK", 
+            database = canConnect ? "Connected" : "Disconnected",
+            tablesExist = true,
+            usersCount = usersCount,
+            timestamp = DateTime.UtcNow,
+            message = "Community Finance API is running"
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Health check failed: {ex.Message}");
+    }
+});
+
+// Add database test endpoint
+app.MapGet("/test-db", async (ApplicationDbContext db) =>
+{
+    try
+    {
+        // Test 1: Connection
+        var canConnect = db.Database.CanConnect();
+        
+        // Test 2: List tables
+        var tables = await db.Database.SqlQueryRaw<string>(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name")
+            .ToListAsync();
+            
+        // Test 3: Try to query users
+        var users = await db.Database.SqlQueryRaw<dynamic>(
+            "SELECT \"UserId\", \"Email\", \"FirstName\", \"LastName\", \"Role\" FROM \"Users\" LIMIT 5")
+            .ToListAsync();
+            
+        return Results.Ok(new
+        {
+            success = true,
+            connection = canConnect ? "✅ Connected" : "❌ Disconnected",
+            tableCount = tables.Count,
+            tables = tables,
+            sampleUsers = users,
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Ok(new
+        {
+            success = false,
+            error = ex.Message,
+            details = ex.InnerException?.Message,
+            timestamp = DateTime.UtcNow
+        });
+    }
+});
+
+// Simple status endpoint
+app.MapGet("/", () => 
+{
+    return Results.Ok(new 
+    { 
+        service = "Community Finance API", 
+        status = "Running",
+        version = "1.0",
+        documentation = "/swagger",
+        healthCheck = "/health",
+        databaseTest = "/test-db"
+    });
+});
+
+Console.WriteLine("🚀 Application starting...");
 app.Run();

@@ -3,6 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace CommunityFinanceAPI.Models.Entities
 {
+    [Table("Users")] // ← ADD THIS LINE HERE
     public class User : BaseEntity
     {
         [Key]
@@ -44,6 +45,5 @@ namespace CommunityFinanceAPI.Models.Entities
 
         [NotMapped]
         public string FullName => $"{FirstName} {LastName}";
-
     }
 }
